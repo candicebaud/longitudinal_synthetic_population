@@ -1,0 +1,13 @@
+#!/bin/bash -l
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=55
+#SBATCH --mem=384000
+#SBATCH --time 24:00:00
+module load gcc/13.2.0
+module load python/3.11.7
+source $HOME/venvs/env_synthpop/bin/activate
+export LD_LIBRARY_PATH="$HOME/local/lib:$LD_LIBRARY_PATH"
+echo STARTING AT `date`
+srun python -u sample_full_model.py &> sample_full_model.txt
+echo FINISHED at `date`
