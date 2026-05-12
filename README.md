@@ -92,8 +92,6 @@ If you use this repository in academic work, please cite the associated paper or
 }
 ```
 
-Please update this citation once the associated paper or official reference is available.
-
 ## Author
 Candice Baud  
 EPFL
