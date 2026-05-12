@@ -17,6 +17,8 @@ from constraints import *
 from har_inside_dimension import *
 from har_generic_code import *
 from har_individual_level import *
+from har_automatic import *
+
 
 
 class AttributeSpec:
@@ -1149,7 +1151,7 @@ class IndividualSpec:
         # -------------------------------------------------------------
         if not list_dim_spec:
             print("WARNING: No dimension specified. Existence was automatically created.")
-            list_dim_spec = [ExistenceDimensionSpec([], existence_density)]
+            list_dim_spec = [ExistenceDimensionSpec([], existence_density_default)]
         
         # -------------------------------------------------------------
         # Case 2: Find Existence dimensions
@@ -1158,7 +1160,7 @@ class IndividualSpec:
 
         if len(existence_dims) == 0:
             print("WARNING: Existence was not specified. It has been created automatically.")
-            existence = ExistenceDimensionSpec([], existence_density)
+            existence = ExistenceDimensionSpec([], existence_density_default)
             list_dim_spec.append(existence)
             existence_dims = [existence]
 
@@ -1176,7 +1178,7 @@ class IndividualSpec:
                 "It was automatically replaced."
             )
             list_dim_spec = [d for d in list_dim_spec if d is not existence]
-            existence = ExistenceDimensionSpec([], existence_density)
+            existence = ExistenceDimensionSpec([], existence_density_default)
             list_dim_spec.append(existence)
 
         # -------------------------------------------------------------
@@ -1186,7 +1188,7 @@ class IndividualSpec:
 
         if len(events) == 0:
             print("WARNING: Existence has no event. Birth was created automatically.")
-            events.append(ExistenceEventSpec([], existence_density))
+            events.append(ExistenceEventSpec([], existence_density_default))
         elif len(events) > 1:
             raise ValueError("Existence must contain exactly one event (Birth).")
         else : 
@@ -1196,7 +1198,7 @@ class IndividualSpec:
                     f"'{events[0].name}' was specified instead. "
                     "The dimension specification has been automatically modified."
                 )
-                existence.list_event_spec = [ExistenceEventSpec([], existence_density)]
+                existence.list_event_spec = [ExistenceEventSpec([], existence_density_default)]
                 
         return list_dim_spec
     
@@ -1231,6 +1233,607 @@ class IndividualSpec:
             if dim.name != "Existence" : #already sampled in the None instance so only sample the rest
                 dim.initialize_indicators(instance_birth_sampled[dim.name], lifespan, rng = rng)
 
+    
+    # ============================================================
+    # Duration block detection
+    # ============================================================
+
+    def _find_block_root(self, parent, dim_name):
+        """
+        Find the root of a dimension in the union-find structure.
+        """
+
+        while parent[dim_name] != dim_name:
+            parent[dim_name] = parent[parent[dim_name]]
+            dim_name = parent[dim_name]
+
+        return dim_name
+
+
+    def _union_blocks(self, parent, dim_a, dim_b):
+        """
+        Merge two dimension blocks in the union-find structure.
+        """
+
+        root_a = self._find_block_root(parent, dim_a)
+        root_b = self._find_block_root(parent, dim_b)
+
+        if root_a != root_b:
+            parent[root_b] = root_a
+
+
+    def _constraint_dimension_names(self, constraint_spec):
+        """
+        Return the set of non-Existence dimensions involved in one
+        DurationLinearConstraintsSpec.
+
+        A constraint can involve:
+        - the constrained path: constraint_spec.path_1
+        - the right-hand-side paths: constraint_spec.list_paths
+        """
+
+        dim_names = set()
+
+        # Left-hand side path
+        if constraint_spec.path_1 is not None:
+            dim_name = constraint_spec.path_1.dimension_name
+            if dim_name != "Existence":
+                dim_names.add(dim_name)
+
+        # Right-hand side paths
+        if constraint_spec.list_paths is not None:
+            for path in constraint_spec.list_paths:
+                dim_name = path.dimension_name
+                if dim_name != "Existence":
+                    dim_names.add(dim_name)
+
+        return dim_names
+
+
+    def build_duration_blocks(self):
+        """
+        Build connected blocks of dimensions from inter-event constraints.
+
+        Each non-Existence dimension is a node.
+        If a DurationLinearConstraintsSpec involves durations from several
+        dimensions, these dimensions are placed in the same block.
+
+        Returns
+        -------
+        blocks : list[dict]
+            Each block is a dictionary:
+
+            {
+                "name": "block_0",
+                "dim_names": [...],
+                "dim_specs": [...],
+                "inter_constraints": [...]
+            }
+
+        Notes
+        -----
+        - Independent dimensions appear alone in their own block.
+        - Linked dimensions appear in the same block.
+        - Existence is excluded because it is sampled separately.
+        """
+
+        # --------------------------------------------------------
+        # 1. Non-Existence dimensions
+        # --------------------------------------------------------
+        dim_specs_by_name = {
+            dim.name: dim
+            for dim in self.list_dim_spec
+            if dim.name != "Existence"
+        }
+
+        dim_names = list(dim_specs_by_name.keys())
+
+        # If there are no non-Existence dimensions
+        if len(dim_names) == 0:
+            return []
+
+        # --------------------------------------------------------
+        # 2. Initialize one block per dimension
+        # --------------------------------------------------------
+        parent = {
+            dim_name: dim_name
+            for dim_name in dim_names
+        }
+
+        # --------------------------------------------------------
+        # 3. Merge dimensions linked by inter-event constraints
+        # --------------------------------------------------------
+        if self.list_inter_constraint_spec is not None:
+
+            for constraint_spec in self.list_inter_constraint_spec:
+
+                involved_dims = self._constraint_dimension_names(
+                    constraint_spec
+                )
+
+                # Keep only dimensions that actually exist in this IndividualSpec
+                involved_dims = [
+                    d for d in involved_dims
+                    if d in dim_specs_by_name
+                ]
+
+                # A constraint involving zero or one dimension does not link blocks
+                if len(involved_dims) <= 1:
+                    continue
+
+                first_dim = involved_dims[0]
+
+                for other_dim in involved_dims[1:]:
+                    self._union_blocks(parent, first_dim, other_dim)
+
+        # --------------------------------------------------------
+        # 4. Collect connected components
+        # --------------------------------------------------------
+        root_to_dims = {}
+
+        for dim_name in dim_names:
+            root = self._find_block_root(parent, dim_name)
+
+            if root not in root_to_dims:
+                root_to_dims[root] = []
+
+            root_to_dims[root].append(dim_name)
+
+        # --------------------------------------------------------
+        # 5. Attach inter-event constraints to the corresponding block
+        # --------------------------------------------------------
+        blocks = []
+
+        for block_id, block_dim_names in enumerate(root_to_dims.values()):
+
+            block_dim_names = sorted(block_dim_names)
+
+            block_dim_set = set(block_dim_names)
+
+            block_constraints = []
+
+            if self.list_inter_constraint_spec is not None:
+
+                for constraint_spec in self.list_inter_constraint_spec:
+
+                    involved_dims = self._constraint_dimension_names(
+                        constraint_spec
+                    )
+
+                    involved_dims = {
+                        d for d in involved_dims
+                        if d in dim_specs_by_name
+                    }
+
+                    # The constraint belongs to this block if all its involved
+                    # dimensions are inside the block.
+                    if (
+                        len(involved_dims) > 0
+                        and involved_dims.issubset(block_dim_set)
+                    ):
+                        block_constraints.append(constraint_spec)
+
+            blocks.append({
+                "name": f"block_{block_id}",
+                "dim_names": block_dim_names,
+                "dim_specs": [
+                    dim_specs_by_name[d]
+                    for d in block_dim_names
+                ],
+                "inter_constraints": block_constraints,
+            })
+
+        # Stable ordering: same as self.list_dim_spec
+        dim_order = {
+            dim.name: k
+            for k, dim in enumerate(self.list_dim_spec)
+        }
+
+        blocks.sort(
+            key=lambda block: min(dim_order[d] for d in block["dim_names"])
+        )
+
+        # Rename after sorting
+        for k, block in enumerate(blocks):
+            block["name"] = f"block_{k}"
+
+        return blocks
+    
+    ##############
+    def _n_duration_coordinates_in_dim(self, dim_spec):
+        """
+        Return the number of duration coordinates of one dimension.
+
+        Each event occurrence has two duration variables:
+            - main_duration
+            - gap_duration
+
+        Therefore, an event with max_count = m contributes 2m coordinates.
+        """
+
+        n_coord = 0
+
+        for ev in dim_spec.list_event_spec:
+            n_coord += 2 * ev.max_count
+
+        return n_coord
+    
+    def get_dimension_duration_indices(self):
+        """
+        Return global duration-vector indices for each non-Existence dimension.
+
+        The order matches the order used in:
+            - fill_durations_instance
+            - build_constraint_matrix
+
+        Returns
+        -------
+        dim_to_indices : dict
+            Dictionary of the form:
+
+            {
+                "Education": np.array([...]),
+                "Employment": np.array([...]),
+                ...
+            }
+        """
+
+        dim_to_indices = {}
+
+        position = 0
+
+        for dim in self.list_dim_spec:
+
+            if dim.name == "Existence":
+                continue
+
+            n_coord = self._n_duration_coordinates_in_dim(dim)
+
+            dim_to_indices[dim.name] = np.arange(
+                position,
+                position + n_coord,
+                dtype=int,
+            )
+
+            position += n_coord
+
+        return dim_to_indices
+    
+    def get_block_duration_indices(self, block):
+        """
+        Return the global duration-vector indices corresponding to one block.
+
+        Parameters
+        ----------
+        block : dict
+            One block returned by build_duration_blocks().
+
+        Returns
+        -------
+        indices : np.ndarray
+            Global indices of the full duration vector corresponding to
+            the dimensions in the block.
+        """
+
+        dim_to_indices = self.get_dimension_duration_indices()
+
+        indices = []
+
+        for dim_name in block["dim_names"]:
+            indices.append(dim_to_indices[dim_name])
+
+        if len(indices) == 0:
+            return np.array([], dtype=int)
+
+        return np.concatenate(indices).astype(int)
+    
+    def build_block_constraint_matrix(self, instance, block):
+        """
+        Build the duration constraint matrix for one block of dimensions.
+
+        The block matrix contains:
+            1. the dimension-level constraints of each dimension in the block;
+            2. the inter-event constraints whose involved dimensions are inside
+               this block.
+
+        Parameters
+        ----------
+        instance : dict
+            Full individual instance.
+
+        block : dict
+            One block returned by build_duration_blocks().
+
+        Returns
+        -------
+        A_block : np.ndarray
+            Constraint matrix of the block.
+
+        b_block : np.ndarray
+            Right-hand-side vector of the block.
+
+        Notes
+        -----
+        The indices in A_block are local to the block.
+
+        This works because add_inter_event_constraints receives the list of
+        dimension specifications as an argument. By passing only the dimensions
+        of the block, get_duration_variable_index computes local indices.
+        """
+
+        lifespan = instance["Existence"]["Birth"]["main_duration"]
+
+        A_block = None
+        b_block = None
+
+        block_dim_specs = block["dim_specs"]
+
+        # --------------------------------------------------------
+        # 1. Add dimension-level constraints
+        # --------------------------------------------------------
+        for dim in block_dim_specs:
+
+            A_dim, b_dim = dim.build_dimension_constraint_matrix(
+                instance[dim.name],
+                lifespan,
+            )
+
+            A_dim = np.asarray(A_dim, dtype=float)
+            b_dim = np.asarray(b_dim, dtype=float)
+
+            if A_block is None:
+                A_block = A_dim
+                b_block = b_dim
+            else:
+                A_block = block_diag(A_block, A_dim)
+                b_block = np.concatenate([b_block, b_dim])
+
+        if A_block is None:
+            raise ValueError(
+                f"Cannot build constraint matrix for empty block {block['name']}."
+            )
+
+        # --------------------------------------------------------
+        # 2. Add inter-event constraints internal to the block
+        # --------------------------------------------------------
+        for constraint_spec in block["inter_constraints"]:
+
+            A_block, b_block = add_inter_event_constraints(
+                A_block,
+                b_block,
+                constraint_spec,
+                block_dim_specs,
+                instance,
+            )
+
+        return A_block, b_block
+    
+
+    def build_all_block_constraint_matrices(self, instance):
+        """
+        Build the constraint matrix for each automatically detected block.
+
+        Parameters
+        ----------
+        instance : dict
+            Full individual instance.
+
+        Returns
+        -------
+        block_data : list[dict]
+            Each element has the form:
+
+            {
+                "name": "block_0",
+                "dim_names": [...],
+                "dim_specs": [...],
+                "inter_constraints": [...],
+                "global_indices": np.ndarray,
+                "A": np.ndarray,
+                "b": np.ndarray
+            }
+        """
+
+        blocks = self.build_duration_blocks()
+
+        block_data = []
+
+        for block in blocks:
+
+            A_block, b_block = self.build_block_constraint_matrix(
+                instance=instance,
+                block=block,
+            )
+
+            global_indices = self.get_block_duration_indices(block)
+
+            block_with_matrix = dict(block)
+            block_with_matrix["global_indices"] = global_indices
+            block_with_matrix["A"] = A_block
+            block_with_matrix["b"] = b_block
+
+            block_data.append(block_with_matrix)
+
+        return block_data
+
+
+####################
+
+    def fill_durations_instance_for_block(self, duration_vector, instance, block):
+        """
+        Fill main_duration and gap_duration for only the dimensions in one block.
+
+        Parameters
+        ----------
+        duration_vector : np.ndarray
+            Local duration vector of the block.
+
+        instance : dict
+            Full individual instance.
+
+        block : dict
+            One block returned by build_all_block_constraint_matrices().
+        """
+
+        vector_position = 0
+
+        for dim in block["dim_specs"]:
+
+            dim_name = dim.name
+
+            for ev in dim.list_event_spec:
+
+                if ev.max_count == 1:
+
+                    ev_name = ev.name
+
+                    instance[dim_name][ev_name]["main_duration"] = duration_vector[
+                        vector_position
+                    ]
+
+                    instance[dim_name][ev_name]["gap_duration"] = duration_vector[
+                        vector_position + 1
+                    ]
+
+                    vector_position += 2
+
+                elif ev.max_count > 1:
+
+                    for z in range(ev.max_count):
+
+                        ev_name = f"{ev.name}_{z + 1}"
+
+                        instance[dim_name][ev_name]["main_duration"] = duration_vector[
+                            vector_position
+                        ]
+
+                        instance[dim_name][ev_name]["gap_duration"] = duration_vector[
+                            vector_position + 1
+                        ]
+
+                        vector_position += 2
+
+                else:
+                    raise ValueError(
+                        f"Invalid max_count={ev.max_count} for event {ev.name}."
+                    )
+
+
+    def fill_terminal_event_duration_for_block(self, instance, block):
+        """
+        Apply terminal-event duration corrections only for dimensions in one block.
+
+        This reuses the existing DimensionSpec.fill_terminal_event_duration method.
+        """
+
+        for dim in block["dim_specs"]:
+            dim.fill_terminal_event_duration(instance[dim.name])
+
+
+    def fill_starting_dates_for_block(self, instance, block):
+        """
+        Fill starting dates only for dimensions in one block.
+
+        Starting dates depend on the individual's date of birth and on durations
+        inside each dimension.
+        """
+
+        dob = instance["Existence"]["Birth"]["main_start_date"]
+
+        for dim in block["dim_specs"]:
+            dim.fill_starting_dates_in_dimension(
+                instance[dim.name],
+                dob,
+            )
+
+
+    def update_instance_from_block_vector(self, x_block, instance, block):
+        """
+        Update the full individual instance from one local block vector.
+
+        This is the block version of update_instance_from_vector.
+        It modifies only the dimensions contained in the block.
+        """
+
+        self.fill_durations_instance_for_block(
+            duration_vector=x_block,
+            instance=instance,
+            block=block,
+        )
+
+        self.fill_terminal_event_duration_for_block(
+            instance=instance,
+            block=block,
+        )
+
+        self.fill_starting_dates_for_block(
+            instance=instance,
+            block=block,
+        )
+
+
+    def extract_block_duration_vector(self, instance, block):
+        """
+        Extract the local duration vector corresponding to one block.
+
+        This is useful for debugging and later for posterior sampling.
+        """
+
+        values = []
+
+        for dim in block["dim_specs"]:
+
+            dim_name = dim.name
+
+            for ev in dim.list_event_spec:
+
+                if ev.max_count == 1:
+
+                    ev_name = ev.name
+
+                    values.append(
+                        instance[dim_name][ev_name]["main_duration"]
+                    )
+
+                    values.append(
+                        instance[dim_name][ev_name]["gap_duration"]
+                    )
+
+                elif ev.max_count > 1:
+
+                    for z in range(ev.max_count):
+
+                        ev_name = f"{ev.name}_{z + 1}"
+
+                        values.append(
+                            instance[dim_name][ev_name]["main_duration"]
+                        )
+
+                        values.append(
+                            instance[dim_name][ev_name]["gap_duration"]
+                        )
+
+                else:
+                    raise ValueError(
+                        f"Invalid max_count={ev.max_count} for event {ev.name}."
+                    )
+
+        return np.asarray(values, dtype=float)
+
+#################
+
+
+
+
+
+
+
+
+
+
+    
+
+    
     def build_constraint_matrix(self, instance):
         BigM = None
         BigB = None
@@ -1512,69 +2115,6 @@ class IndividualSpec:
 
         return Trajectory(dim.name, list_events, list_indic)
 
-    def sample(
-        self,
-        dimension_mode="joint",   # "independent" or "joint"
-        n_gibbs=1000,
-        burnin=1000,
-        burnin_existence=1000,
-        thin=1,
-        seed=0,
-        x0=None,
-    ):
-        """
-        Unified sampling interface for an individual.
-
-        Parameters
-        ----------
-        dimension_mode : str
-        """
-
-        trajectories = []
-
-        # --------------------------------------------------
-        # 1. SAMPLE EXISTENCE
-        # --------------------------------------------------
-        d0 = next((d for d in self.list_dim_spec if d.name == "Existence"), None)
-
-        existence_trajectory = d0.sample_from_prior(
-            burnin=burnin_existence,
-            seed=seed,
-        )
-
-        dob = existence_trajectory.list_events[0].main_start_date
-        lifespan = existence_trajectory.list_events[0].main_duration
-
-        trajectories.append(existence_trajectory)
-
-        # --------------------------------------------------
-        # 2. SAMPLE OTHER DIMENSIONS
-        # --------------------------------------------------
-        if dimension_mode == "independent":
-            return self._sample_dimensions_independent(
-                trajectories,
-                dob,
-                lifespan,
-                n_gibbs,
-                burnin,
-                seed,
-                x0,
-            )
-
-        elif dimension_mode == "joint":
-            return self._sample_dimensions_joint(
-                trajectories,
-                existence_trajectory,
-                n_gibbs,
-                burnin,
-                thin,
-                seed,
-                x0,
-            )
-
-        else:
-            raise ValueError(f"Unknown dimension_mode: {dimension_mode}")
-        
     def _sample_dimensions_independent(
         self,
         trajectories,
@@ -1658,6 +2198,146 @@ class IndividualSpec:
             trajectories.append(trajectory)
 
         return Individual(self.id, trajectories)
+
+    def _sample_dimensions_automatic(
+        self,
+        trajectories,
+        existence_trajectory,
+        n_gibbs,
+        burnin,
+        thin,
+        seed,
+        x0,
+    ):
+        """
+        Sample non-Existence dimensions using automatically detected blocks.
+        """
+
+        birth = existence_trajectory.list_events[0]
+
+        instance_birth = {
+            "Birth": {
+                "main_duration": birth.main_duration,
+                "main_start_date": birth.main_start_date,
+                "gap_duration": birth.gap_duration,
+                "gap_start_date": birth.gap_start_date,
+            }
+        }
+
+        # Add existence attributes if any
+        if birth.attributes is not None:
+            for att in birth.attributes:
+                instance_birth["Birth"][att.name] = att.value
+
+        instance_res, accept_rate_dur, accept_rate_attr, block_data = (
+            automatic_block_hit_and_run(
+                self,
+                instance_birth,
+                n_samples=1,
+                n_gibbs=n_gibbs,
+                burnin=burnin,
+                thin=thin,
+                seed=seed,
+                x0=x0,
+            )
+        )
+
+        for dim in self.list_dim_spec:
+
+            if dim.name == "Existence":
+                continue
+
+            trajectory = self._build_trajectory_from_instance(
+                dim,
+                instance_res[dim.name],
+            )
+
+            trajectories.append(trajectory)
+
+        return Individual(self.id, trajectories)
+    
+    def sample(
+        self,
+        dimension_mode="automatic",   # "automatic", "independent", or "joint"
+        n_gibbs=1000,
+        burnin=1000,
+        burnin_existence=1000,
+        thin=1,
+        seed=0,
+        x0=None,
+    ):
+        """
+        Unified sampling interface for an individual.
+
+        dimension_mode:
+            - "automatic": detect blocks of linked dimensions automatically
+            - "independent": old dimension-by-dimension sampler
+            - "joint": old full joint sampler
+        """
+
+        trajectories = []
+
+        # --------------------------------------------------
+        # 1. SAMPLE EXISTENCE
+        # --------------------------------------------------
+        d0 = next(
+            (d for d in self.list_dim_spec if d.name == "Existence"),
+            None,
+        )
+
+        existence_trajectory = d0.sample_from_prior(
+            burnin=burnin_existence,
+            seed=seed,
+        )
+
+        dob = existence_trajectory.list_events[0].main_start_date
+        lifespan = existence_trajectory.list_events[0].main_duration
+
+        trajectories.append(existence_trajectory)
+
+        # --------------------------------------------------
+        # 2. SAMPLE OTHER DIMENSIONS
+        # --------------------------------------------------
+        if dimension_mode == "automatic":
+
+            return self._sample_dimensions_automatic(
+                trajectories=trajectories,
+                existence_trajectory=existence_trajectory,
+                n_gibbs=n_gibbs,
+                burnin=burnin,
+                thin=thin,
+                seed=seed,
+                x0=x0,
+            )
+
+        elif dimension_mode == "independent":
+
+            return self._sample_dimensions_independent(
+                trajectories,
+                dob,
+                lifespan,
+                n_gibbs,
+                burnin,
+                seed,
+                x0,
+            )
+
+        elif dimension_mode == "joint":
+
+            return self._sample_dimensions_joint(
+                trajectories,
+                existence_trajectory,
+                n_gibbs,
+                burnin,
+                thin,
+                seed,
+                x0,
+            )
+
+        else:
+            raise ValueError(f"Unknown dimension_mode: {dimension_mode}")
+        
+    
     
 
 class PopulationSpec:
@@ -1718,7 +2398,7 @@ class PopulationSpec:
 
     def sample_parallel(
         self,
-        dimension_mode="joint",
+        dimension_mode="automatic",
         n_gibbs=1000,
         burnin=1000,
         burnin_existence=1000,
@@ -1755,7 +2435,7 @@ class PopulationSpec:
     
     def sample_parallel_to_disk(
         self,
-        dimension_mode="joint",
+        dimension_mode="automatic",
         n_gibbs=1000,
         burnin=1000,
         burnin_existence=1000,
