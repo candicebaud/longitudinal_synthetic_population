@@ -34,7 +34,7 @@ The framework supports:
 - event-specific attributes;
 - temporal constraints on event start ages and durations;
 - linear constraints between durations of different events;
-- independent or joint sampling of dimensions;
+- independent, joint or automatic sampling of dimensions;
 - prior sampling without observed data;
 - population-level generation;
 - parallelized population sampling;
@@ -91,8 +91,6 @@ If you use this repository in academic work, please cite the associated paper or
   howpublished = {\url{https://github.com/candicebaud/longitudinal_synthetic_population}}
 }
 ```
-
-Please update this citation once the associated paper or official reference is available.
 
 ## Author
 Candice Baud  
