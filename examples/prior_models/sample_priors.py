@@ -7,7 +7,7 @@ import random
 
 import os
 
-from simulations.priors.model_priors import *
+from model_priors import *
 
 # --------------------------------------------------
 # MAIN ENTRY POINT (required for multiprocessing)
