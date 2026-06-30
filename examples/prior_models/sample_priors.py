@@ -1,3 +1,4 @@
+"""29.06.2026"""
 import numpy as np
 from scipy.stats import norm, uniform, expon, gamma, lognorm, beta, poisson
 import math

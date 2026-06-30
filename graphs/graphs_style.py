@@ -1,3 +1,4 @@
+"""29.06.2026"""
 # graph style matplotlib style for consistent figures (histograms + general plots)
 # Usage:
 #   import numpy as np
