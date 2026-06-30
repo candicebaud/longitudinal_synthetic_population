@@ -1,0 +1,57 @@
+cff-version: 1.2.0
+message: "If you use this repository in academic work, please cite the first release of the software and the associated publications."
+title: "Longitudinal Synthetic Population Framework"
+type: software
+authors:
+  - family-names: "Baud"
+    given-names: "Candice"
+repository-code: "https://github.com/candicebaud/longitudinal_synthetic_population"
+url: "https://github.com/candicebaud/longitudinal_synthetic_population"
+abstract: "A Python framework for generating longitudinal synthetic populations using flexible life-course trajectory models."
+keywords:
+  - synthetic population
+  - population synthesis
+  - longitudinal data
+  - panel population
+  - Bayesian modeling
+  - mobility
+  - transportation
+license: MIT
+version: "1.0.0"
+date-released: "2026-06-30"
+
+preferred-citation:
+  type: software
+  authors:
+    - family-names: "Baud"
+      given-names: "Candice"
+  title: "Longitudinal Synthetic Population Framework"
+  version: "1.0.0"
+  year: 2026
+  repository-code: "https://github.com/candicebaud/longitudinal_synthetic_population"
+  url: "https://github.com/candicebaud/longitudinal_synthetic_population/releases/tag/v1.0.0"
+
+references:
+  - type: conference-paper
+    authors:
+      - family-names: "Baud"
+        given-names: "Candice"
+      - family-names: "Bierlaire"
+        given-names: "Michel"
+    title: "A Flexible and Realistic Synthetic Panel Population Generation"
+    conference:
+      name: "2026 IEEE 29th International Conference on Intelligent Transportation Systems"
+    year: 2026
+    notes: "In press"
+
+  - type: conference-paper
+    authors:
+      - family-names: "Baud"
+        given-names: "Candice"
+      - family-names: "Bierlaire"
+        given-names: "Michel"
+    title: "From Priors to Data: A Flexible Bayesian Framework for Panel Synthetic Population Generation"
+    conference:
+      name: "2026 hEART Conference"
+    year: 2026
+    notes: "In press"
