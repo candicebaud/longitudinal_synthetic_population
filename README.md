@@ -81,16 +81,43 @@ This convention is used to make the framework easier to navigate and extend.
 A detailed code documentation is available in the repository. It describes the installation, notation conventions, and the main classes used to define and sample synthetic populations.
 
 ## Citation
-If you use this repository in academic work, please cite the associated paper or repository.
+
+If you use this repository in academic work, please cite the first release of the repository and, when relevant, the associated publications.
+
+### Software repository
 
 ```bibtex
-@misc{baud_longitudinal_synthetic_population,
-  author       = {Baud, Candice},
-  title        = {Longitudinal Synthetic Population Framework},
-  year         = {2026},
-  howpublished = {\url{https://github.com/candicebaud/longitudinal_synthetic_population}}
+@software{baud_longitudinal_synthetic_population_v1_0_0,
+  author  = {Baud, Candice},
+  title   = {{Longitudinal Synthetic Population Framework}},
+  year    = {2026},
+  version = {v1.0.0},
+  url     = {https://github.com/candicebaud/longitudinal_synthetic_population/releases/tag/v1.0.0}
 }
 ```
+
+If the release is archived on Zenodo, please cite the Zenodo DOI associated with the first release instead.
+
+### Associated publications
+
+```bibtex
+@inproceedings{baud_bierlaire_2026_flexible_realistic,
+  author    = {Baud, Candice and Bierlaire, Michel},
+  title     = {{A Flexible and Realistic Synthetic Panel Population Generation}},
+  booktitle = {Proceedings of the 2026 IEEE 29th International Conference on Intelligent Transportation Systems},
+  year      = {2026},
+  note      = {In press}
+}
+
+@inproceedings{baud_bierlaire_2026_priors_to_data,
+  author    = {Baud, Candice and Bierlaire, Michel},
+  title     = {{From Priors to Data: A Flexible Bayesian Framework for Panel Synthetic Population Generation}},
+  booktitle = {Proceedings of the 2026 hEART Conference},
+  year      = {2026},
+  note      = {In press}
+}
+```
+
 
 ## Author
 Candice Baud  
