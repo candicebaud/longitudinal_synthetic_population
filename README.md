@@ -1,10 +1,10 @@
 # Longitudinal Synthetic Population Framework
 
-This repository contains the code, documentation, examples, and graph-generation scripts for a flexible framework to generate longitudinal synthetic populations.
+This repository contains the code, documentation, examples, and graph-generation scripts of a framework to generate longitudinal synthetic populations.
 
-The framework is designed to help researchers generate synthetic populations based on individual life trajectories. Instead of creating independent cross-sectional populations for each year, the approach generates time-independent life trajectories and maps them to time-dependent population states.
+The framework is designed to help researchers generate synthetic longitudinal populations. Instead of creating independent cross-sectional populations for each year, the approach generates time-independent life trajectories and maps them to time-dependent population states.
 
-The repository is structured to be reused and extended by other researchers. It includes the source code of the framework, examples showing how to define and sample models, documentation, and notebooks to analyze the generated populations and produce graphs.
+The repository is structured to be reused by other researchers. It includes the source code of the framework, examples showing how to define and sample models, documentation, and notebooks to analyze the generated populations and produce graphs.
 
 ## Repository content
 
@@ -19,7 +19,7 @@ longitudinal_synthetic_population/
 └── documentation/  # Documentation of the framework and code
 ```
 
-The `framework` folder contains the core implementation. The `examples` folder contains examples to help users become familiar with the framework. In particular, the `prior model` example shows how to sample a population from prior models. The `graphs` folder contains example notebooks to analyze results and generate figures.
+The `framework` folder contains the core implementation. The `examples` folder contains examples to help users become familiar with the framework. The `prior model` example shows how to sample a population from prior models. The `graphs` folder contains example notebooks to analyze results and generate figures.
 
 ## Main idea
 The framework is based on a trajectory representation of individuals. Each individual is described by a set of life-course dimensions, such as existence, education, employment, or other demographic and behavioral characteristics.
