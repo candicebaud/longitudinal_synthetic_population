@@ -13,10 +13,10 @@ The repository contains the following main folders:
 ```text
 longitudinal_synthetic_population/
 │
-├── framework/      # Source code defining the synthetic population framework
-├── examples/       # Examples showing how to use the framework
-├── graphs/         # Notebooks and scripts to analyze outputs and produce graphs
-└── documentation/  # Documentation of the framework and code
+├── framework/                # Source code defining the synthetic population framework
+├── examples/                 # Examples showing how to use the framework
+├── graphs/                   # Notebooks and scripts to analyze outputs and produce graphs
+└── prior_documentation.pdf   # Documentation of the prior model and framework
 ```
 
 The `framework` folder contains the core implementation. The `examples` folder contains examples to help users become familiar with the framework. The `prior model` example shows how to sample a population from prior models. The `graphs` folder contains example notebooks to analyze results and generate figures.
