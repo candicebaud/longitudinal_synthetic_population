@@ -60,6 +60,8 @@ The main external dependencies are:
 numpy
 pandas
 pycddlib
+scipy
+matplotlib
 ```
 
 A particular point of attention concerns `pycddlib`. The package provides the `cdd` module, which is used to compute polytope vertices from systems of linear inequalities. The repository supports both the older `pycddlib` API, used on SCITAS with version 2.1.7, and the newer 3.x API. Since `pycddlib` 3.x introduced backward-incompatible changes, users should select the implementation corresponding to their installed version.
