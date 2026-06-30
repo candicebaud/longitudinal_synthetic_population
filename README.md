@@ -52,7 +52,7 @@ cd longitudinal_synthetic_population
 The project is implemented in Python. It has been tested with Python 3.11.7 on the SCITAS (https://scitas-doc.epfl.ch/) supercomputer and with Python 3.13.7 on a local machine. Python 3.11.7 or newer is recommended.
 Install the main dependencies with:
 ```bash
-pip install numpy pandas pycddlib
+pip install numpy pandas scipy matplotlib pycddlib
 ```
 
 The main external dependencies are:
