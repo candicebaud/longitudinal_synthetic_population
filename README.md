@@ -66,6 +66,19 @@ matplotlib
 
 A particular point of attention concerns `pycddlib`. The package provides the `cdd` module, which is used to compute polytope vertices from systems of linear inequalities. The repository supports both the older `pycddlib` API, used on SCITAS with version 2.1.7, and the newer 3.x API. Since `pycddlib` 3.x introduced backward-incompatible changes, users should select the implementation corresponding to their installed version.
 
+### Python path
+
+The source code of the framework is located in the `framework/` directory.  
+Before running the examples, add this directory to your Python path.
+
+From the root of the repository, run:
+
+```bash
+export PYTHONPATH="$PWD/framework:$PYTHONPATH"
+cd examples/prior_models
+python sample_priors.py
+```
+
 ## Code organization
 The code files follow a naming convention based on their first word:
 ```text
