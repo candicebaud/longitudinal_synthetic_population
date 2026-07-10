@@ -1,4 +1,8 @@
-""" Model definition (work included), 29.06.2026"""
+""" Model definition, 
+
+Baud Candice
+Fri July 10 10:33:00 2026
+"""
 
 import numpy as np
 from scipy.stats import norm, uniform, expon, gamma, lognorm, beta, poisson
@@ -1161,4 +1165,4 @@ inter_constraints = [ic0, ic1, ic2, ic3, ic4, ic5, ic6, ic7, ic8, ic9, ic10, ic1
 def joint_duration_prior(instance):
     return(log_employment_density_prior(instance) + driving_license_log_density_prior(instance) + education_log_density_prior(instance))
 
-pop_spec_prior = PopulationSpec(50000, [d0_prior, d1_prior, d2_prior, d3_prior, d4_prior], joint_duration_prior, inter_constraints)
+pop_spec_prior = PopulationSpec(5000, [d0_prior, d1_prior, d2_prior, d3_prior, d4_prior], joint_duration_prior, inter_constraints)

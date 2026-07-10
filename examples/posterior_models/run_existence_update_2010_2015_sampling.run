@@ -1,0 +1,13 @@
+#!/bin/bash -l
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=10
+#SBATCH --mem=38400
+#SBATCH --time 12:00:00
+module load gcc/13.2.0
+module load python/3.11.7
+source $HOME/venvs/env_synthpop/bin/activate
+export LD_LIBRARY_PATH="$HOME/local/lib:$LD_LIBRARY_PATH"
+echo STARTING AT `date`
+srun python -u sample_existence_update_2010_2015_sampling.py &> sample_existence_update_2010_2015_sampling.txt
+echo FINISHED at `date`
