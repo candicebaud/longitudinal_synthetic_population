@@ -20,6 +20,10 @@ keywords:
 license: MIT
 version: "2.0.0"
 date-released: "2026-07-10"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.21293241"
+    description: "Concept DOI: always resolves to the latest archived version"
 preferred-citation:
   type: software
   authors:
