@@ -6,6 +6,7 @@ It then samples durations block by block, while always evaluating the
 full individual joint density.
 
 Baud Candice
+Fri July 10 10:33:00 2026
 """
 
 import copy
