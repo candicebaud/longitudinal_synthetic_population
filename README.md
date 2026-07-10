@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21293241.svg)](https://doi.org/10.5281/zenodo.21293241)
+
 # Longitudinal Synthetic Population Framework
 
 This repository contains the code, documentation, examples, and graph-generation scripts for a flexible framework to generate longitudinal synthetic populations.
