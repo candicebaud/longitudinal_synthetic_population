@@ -13,15 +13,21 @@ import copy
 import numpy as np
 from typing import Optional
 
+
 from har_generic_code import (
-    compute_polytope_vertices,
-    dirichlet_sample_duration_from_vertices,
+    chebyshev_center_affine,
+    extract_fixed_coordinates_from_equalities,
+    extract_all_fixed_coordinates_from_equalities,
     is_feasible,
     extract_equalities_from_opposites,
     nullspace_basis,
     chord_interval,
+    build_equality_projector,
+    enforce_equalities_exactly,
 )
 
+    # compute_polytope_vertices,
+    # dirichlet_sample_duration_from_vertices,
 
 def _prepare_block_geometry(
     block_data,
@@ -47,6 +53,8 @@ def _prepare_block_geometry(
             - b_ineq
             - N
             - fixed_idx
+            - exact_fixed_idx
+            - exact_fixed_values
             - k
     """
 
@@ -89,7 +97,21 @@ def _prepare_block_geometry(
     block_data["b_ineq"] = b_ineq
     block_data["N"] = N
     block_data["fixed_idx"] = fixed_idx
+    (
+        block_data["exact_fixed_idx"],
+        block_data["exact_fixed_values"],
+    ) = extract_all_fixed_coordinates_from_equalities(
+        A_eq,
+        b_eq,
+        tol=eq_tol,
+    )
     block_data["k"] = k
+
+    # General projector for the FULL block equality system (including
+    # coupled, multi-coordinate rows). A_eq is fixed for the block's whole
+    # chain, so the pseudoinverse is computed once here and reused on
+    # every proposal instead of being re-derived every iteration.
+    block_data["P_eq"] = build_equality_projector(A_eq)
 
     return block_data
 
@@ -103,35 +125,57 @@ def _initialize_block_vector(
     Initialize a feasible duration vector for one block.
 
     If x0_block is provided, it is checked for feasibility.
-    Otherwise, a feasible point is built from the vertices of the block
-    polytope, using the same logic as the existing samplers.
+    Otherwise, the Chebyshev center is computed in the affine hull defined by
+    the block equalities. This gives a positive radius whenever the movable
+    part of the feasible set has a nonempty relative interior.
+
+    Returns
+    -------
+    x_block : np.ndarray
+        Initial feasible vector for this block.
+    radius : float or None
+        Relative Chebyshev radius. None when x0_block was supplied.
     """
 
     A = np.asarray(block_data["A"], dtype=float)
     b = np.asarray(block_data["b"], dtype=float)
 
     if x0_block is None:
-        vertices = compute_polytope_vertices(A, b)
-
-        x_block = dirichlet_sample_duration_from_vertices(
-            vertices,
-            np.ones(vertices.shape[0]),
+        x_block, radius = chebyshev_center_affine(
+            block_data["A_ineq"],
+            block_data["b_ineq"],
+            block_data["A_eq"],
+            block_data["b_eq"],
+            block_data["N"],
+            tol=feas_tol,
         )
 
     else:
         x_block = np.asarray(x0_block, dtype=float).copy()
+        radius = None
 
-        if not is_feasible(A, b, x_block, tol=feas_tol):
-            raise ValueError(
-                f"Provided x0 is not feasible for {block_data['name']}."
-            )
+    x_block = enforce_equalities_exactly(
+        x_block,
+        block_data["A_eq"],
+        block_data["b_eq"],
+        P=block_data["P_eq"],
+        exact_fixed_idx=block_data["exact_fixed_idx"],
+        exact_fixed_values=block_data["exact_fixed_values"],
+    )
 
-    return x_block
+    if not is_feasible(A, b, x_block, tol=feas_tol):
+        source = "Computed Chebyshev center" if x0_block is None else "Provided x0"
+        raise ValueError(
+            f"{source} is not feasible for {block_data['name']}."
+        )
+
+    return x_block, radius
 
 
 def _propose_block_duration_vector(
     block_data,
     rng,
+    feas_tol=1e-10,
 ):
     """
     Propose a new duration vector for one block using Hit-and-Run.
@@ -180,10 +224,26 @@ def _propose_block_duration_vector(
     tau = rng.uniform(t_min, t_max)
     x_prop = x_current + tau * u
 
-    fixed_idx = block_data["fixed_idx"]
+    # Nullspace arithmetic satisfies A_eq @ x = b_eq only up to floating
+    # precision -- for coupled, multi-coordinate rows too, not just
+    # explicit single-coordinate ones. Snap the whole block equality
+    # system back exactly instead of drifting a little further each move.
+    x_prop = enforce_equalities_exactly(
+        x_prop,
+        block_data["A_eq"],
+        block_data["b_eq"],
+        P=block_data["P_eq"],
+        exact_fixed_idx=block_data["exact_fixed_idx"],
+        exact_fixed_values=block_data["exact_fixed_values"],
+    )
 
-    if fixed_idx.size > 0:
-        x_prop[fixed_idx] = x_current[fixed_idx]
+    if not is_feasible(
+        block_data["A"],
+        block_data["b"],
+        x_prop,
+        tol=feas_tol,
+    ):
+        return None, False
 
     return x_prop, True
 
@@ -279,32 +339,34 @@ def automatic_block_hit_and_run(
     # ----------------------------------------------------
     for block in block_data:
 
+        # Equalities and the nullspace must be known before computing the
+        # Chebyshev center; otherwise opposite inequality rows force r = 0.
+        _prepare_block_geometry(
+            block,
+            eq_tol=eq_tol,
+            fixed_row_tol=fixed_row_tol,
+        )
+
         if x0 is None:
             x0_block = None
         else:
             x0 = np.asarray(x0, dtype=float)
             x0_block = x0[block["global_indices"]]
 
-        x_block = _initialize_block_vector(
+        x_block, radius = _initialize_block_vector(
             block,
             x0_block=x0_block,
             feas_tol=feas_tol,
         )
 
         block["x_current"] = x_block
+        block["chebyshev_radius"] = radius
 
         # Fill the corresponding dimensions in the full instance
         model.update_instance_from_block_vector(
             x_block,
             instance_current,
             block,
-        )
-
-        # Precompute geometry after x_current exists
-        _prepare_block_geometry(
-            block,
-            eq_tol=eq_tol,
-            fixed_row_tol=fixed_row_tol,
         )
 
     # ----------------------------------------------------
@@ -390,6 +452,7 @@ def automatic_block_hit_and_run(
             x_prop, moved = _propose_block_duration_vector(
                 block,
                 rng=rng,
+                feas_tol=feas_tol,
             )
 
             if not moved:

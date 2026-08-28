@@ -74,22 +74,6 @@ def all_dim_hit_and_run(
     m, d = A.shape
 
     # ----------------------------------------------------
-    # Initial feasible x
-    # ----------------------------------------------------
-    vertices = compute_polytope_vertices(A, b)
-
-    if x0 is None:
-        x_current = dirichlet_sample_duration_from_vertices(
-            vertices, np.ones(vertices.shape[0])
-        )
-    else:
-        x_current = np.asarray(x0, float).copy()
-        if not is_feasible(A, b, x_current, tol=feas_tol):
-            raise ValueError("Provided x0 is not feasible.")
-
-    model.update_instance_from_vector(x_current, instance_current)
-
-    # ----------------------------------------------------
     # Extract equalities
     # ----------------------------------------------------
     A_eq, b_eq, keep_mask = extract_equalities_from_opposites(
@@ -114,6 +98,48 @@ def all_dim_hit_and_run(
         fixed_idx = np.where(row_norms <= fixed_row_tol * max_row)[0]
     else:
         fixed_idx = np.arange(d)
+
+    # Chain-aware: catches coordinates pinned directly by a single-row
+    # equality AND coordinates pinned only indirectly through a chain of
+    # coupled rows (e.g. gap = main combined with main = 0).
+    exact_fixed_idx, exact_fixed_values = \
+        extract_all_fixed_coordinates_from_equalities(A_eq, b_eq, tol=eq_tol)
+
+    # General projector for the FULL equality system (including coupled,
+    # multi-coordinate rows). A_eq is fixed for this whole chain, so the
+    # pseudoinverse is computed once here and reused on every proposal.
+    P_eq = build_equality_projector(A_eq)
+
+    # ----------------------------------------------------
+    # Initial feasible x in the equality affine hull
+    # ----------------------------------------------------
+    if x0 is None:
+        x_current, chebyshev_radius = chebyshev_center_affine(
+            A_ineq,
+            b_ineq,
+            A_eq,
+            b_eq,
+            N,
+            tol=feas_tol,
+        )
+    else:
+        x_current = np.asarray(x0, float).copy()
+        chebyshev_radius = None
+
+    x_current = enforce_equalities_exactly(
+        x_current,
+        A_eq,
+        b_eq,
+        P=P_eq,
+        exact_fixed_idx=exact_fixed_idx,
+        exact_fixed_values=exact_fixed_values,
+    )
+
+    if not is_feasible(A, b, x_current, tol=feas_tol):
+        source = "Computed Chebyshev center" if x0 is None else "Provided x0"
+        raise ValueError(f"{source} is not feasible.")
+
+    model.update_instance_from_vector(x_current, instance_current)
 
     # ----------------------------------------------------
     # Initial log density
@@ -213,27 +239,35 @@ def all_dim_hit_and_run(
                 tau = rng.uniform(t_min, t_max)
                 x_prop = x_current + tau * u
 
-                # Strictly enforce equalities
-                # x_prop = project_onto_equalities(x_prop, A_eq, b_eq)
+                # Snap the whole equality system back exactly (coupled
+                # rows included), instead of relying on N's floating-point
+                # orthogonality to A_eq to hold on its own.
+                x_prop = enforce_equalities_exactly(
+                    x_prop,
+                    A_eq,
+                    b_eq,
+                    P=P_eq,
+                    exact_fixed_idx=exact_fixed_idx,
+                    exact_fixed_values=exact_fixed_values,
+                )
 
-                # Enforce structurally fixed coordinates
-                if fixed_idx.size > 0:
-                    x_prop[fixed_idx] = x_current[fixed_idx]
-
-                # Update instance with proposed durations
-                model.update_instance_from_vector(x_prop, instance_current)
-
-                logp_prop = float(model.joint_dist_duration(instance_current))
-
-                log_alpha = logp_prop - logp_current
-
-                if (log_alpha >= 0.0) or (np.log(rng.uniform()) < log_alpha):
-                    x_current = x_prop
-                    logp_current = logp_prop
-                    accept_rate_dur.append(1)
-                else:
-                    instance_current = save_current_instance
+                if not is_feasible(A, b, x_prop, tol=feas_tol):
                     accept_rate_dur.append(0)
+                else:
+                    # Update instance with proposed durations
+                    model.update_instance_from_vector(x_prop, instance_current)
+
+                    logp_prop = float(model.joint_dist_duration(instance_current))
+
+                    log_alpha = logp_prop - logp_current
+
+                    if (log_alpha >= 0.0) or (np.log(rng.uniform()) < log_alpha):
+                        x_current = x_prop
+                        logp_current = logp_prop
+                        accept_rate_dur.append(1)
+                    else:
+                        instance_current = save_current_instance
+                        accept_rate_dur.append(0)
 
         # ====================================================
         # 3) Store

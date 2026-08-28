@@ -59,19 +59,6 @@ def inside_dimension_hit_and_run(
     model.initialize_instance_attributes(instance_inside, rng = rng)
 
     # ----------------------------------------------------
-    # Initial feasible point : changed scipy method to vertices because more efficient
-    # ----------------------------------------------------
-    vertices = compute_polytope_vertices(A, b)  
-    if x0 is None: 
-        x_current = dirichlet_sample_duration_from_vertices(vertices, np.ones(vertices.shape[0]))
-    else:
-        x_current = np.asarray(x0, float).copy()
-        if not is_feasible(A, b, x_current, tol=feas_tol):
-            raise ValueError("Provided x0 is not feasible.")
-
-    model.update_instance_from_vector(x_current, instance_inside, dob)
-
-    # ----------------------------------------------------
     # Extract equalities
     # ----------------------------------------------------
     A_eq, b_eq, keep_mask = extract_equalities_from_opposites(A, b, tol=eq_tol)
@@ -89,7 +76,53 @@ def inside_dimension_hit_and_run(
 
     # Detect structurally fixed coordinates
     row_norms = np.linalg.norm(N, axis=1)
-    fixed_idx = np.where(row_norms <= fixed_row_tol * np.max(row_norms))[0]
+    max_row = float(np.max(row_norms)) if row_norms.size > 0 else 0.0
+    if max_row > 0:
+        fixed_idx = np.where(row_norms <= fixed_row_tol * max_row)[0]
+    else:
+        fixed_idx = np.arange(d)
+
+    # Chain-aware: catches coordinates pinned directly by a single-row
+    # equality AND coordinates pinned only indirectly through a chain of
+    # coupled rows (e.g. gap = main combined with main = 0).
+    exact_fixed_idx, exact_fixed_values = \
+        extract_all_fixed_coordinates_from_equalities(A_eq, b_eq, tol=eq_tol)
+
+    # General projector for the FULL equality system (including coupled,
+    # multi-coordinate rows). A_eq is fixed for this whole chain, so the
+    # pseudoinverse is computed once here and reused on every proposal.
+    P_eq = build_equality_projector(A_eq)
+
+    # ----------------------------------------------------
+    # Initial feasible point in the equality affine hull
+    # ----------------------------------------------------
+    if x0 is None:
+        x_current, chebyshev_radius = chebyshev_center_affine(
+            A_ineq,
+            b_ineq,
+            A_eq,
+            b_eq,
+            N,
+            tol=feas_tol,
+        )
+    else:
+        x_current = np.asarray(x0, float).copy()
+        chebyshev_radius = None
+
+    x_current = enforce_equalities_exactly(
+        x_current,
+        A_eq,
+        b_eq,
+        P=P_eq,
+        exact_fixed_idx=exact_fixed_idx,
+        exact_fixed_values=exact_fixed_values,
+    )
+
+    if not is_feasible(A, b, x_current, tol=feas_tol):
+        source = "Computed Chebyshev center" if x0 is None else "Provided x0"
+        raise ValueError(f"{source} is not feasible.")
+
+    model.update_instance_from_vector(x_current, instance_inside, dob)
 
     # ----------------------------------------------------
     # If no movement possible: durations fixed, sample attributes only
@@ -179,25 +212,34 @@ def inside_dimension_hit_and_run(
 
         t_prop = rng.uniform(t_min, t_max)
         x_prop = x_current + t_prop * u
-        # x_prop = project_onto_equalities(x_prop, A_eq, b_eq)
+        # Snap the whole equality system back exactly (coupled rows
+        # included), instead of relying on N's floating-point
+        # orthogonality to A_eq to hold on its own.
+        x_prop = enforce_equalities_exactly(
+            x_prop,
+            A_eq,
+            b_eq,
+            P=P_eq,
+            exact_fixed_idx=exact_fixed_idx,
+            exact_fixed_values=exact_fixed_values,
+        )
 
-        # Enforce fixed coordinates explicitly for the proposed duration
-        if fixed_idx.size > 0:
-            x_prop[fixed_idx] = x_current[fixed_idx]
-
-        # Update instance with the new duration values
-        model.update_instance_from_vector(x_prop, instance_inside, dob)
-        logp_prop_durations = float(model.log_density(instance_inside, dob, lifespan))
-
-        # Accept/reject durations move
-        log_alpha_durations = logp_prop_durations - logp_current
-        if (log_alpha_durations >= 0.0) or (np.log(rng.uniform()) < log_alpha_durations):
-            x_current = x_prop
-            logp_current = logp_prop_durations
-            accept_rate_dur.append(1)
-        else:
-            instance_inside = save_current_instance  # Restore previous state (durations)
+        if not is_feasible(A, b, x_prop, tol=feas_tol):
             accept_rate_dur.append(0)
+        else:
+            # Update instance with the new duration values
+            model.update_instance_from_vector(x_prop, instance_inside, dob)
+            logp_prop_durations = float(model.log_density(instance_inside, dob, lifespan))
+
+            # Accept/reject durations move
+            log_alpha_durations = logp_prop_durations - logp_current
+            if (log_alpha_durations >= 0.0) or (np.log(rng.uniform()) < log_alpha_durations):
+                x_current = x_prop
+                logp_current = logp_prop_durations
+                accept_rate_dur.append(1)
+            else:
+                instance_inside = save_current_instance  # Restore previous state (durations)
+                accept_rate_dur.append(0)
 
         # ----------------------------------------------------
         # Store the state if it's past the burn-in phase
@@ -408,4 +450,3 @@ def run_multiple_inside_dimension(
     final_output["accept_rate_attr"] = accept_rates_attr
 
     return final_output
-

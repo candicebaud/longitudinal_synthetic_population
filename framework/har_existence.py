@@ -34,9 +34,9 @@ def hit_and_run_existence(
     model.initialize_instance_attributes(instance_inside, rng = rng)
 
     # ---- Initialize x ----
-    vertices = compute_polytope_vertices(A, b)  
+    # vertices = compute_polytope_vertices(A, b)  
     if x0 is None: 
-        x_current = dirichlet_sample_duration_from_vertices(vertices, np.ones(vertices.shape[0]))
+        x_current, r = find_feasible_point(A, b)
     else:
         x_current = np.asarray(x0, float).copy()
         if not is_feasible(A, b, x_current, tol=feas_tol):
