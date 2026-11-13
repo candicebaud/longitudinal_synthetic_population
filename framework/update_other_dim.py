@@ -856,20 +856,20 @@ class JointDimPopUpdater:
 
         if x0_block is None:
 
-            vertices = compute_polytope_vertices(A, b)
+            # vertices = compute_polytope_vertices(A, b)
+            x_block, r = find_feasible_point(A, b)
 
             # x_block = dirichlet_sample_duration_from_vertices(
             #     vertices,
             #     np.ones(vertices.shape[0]),
             # )
 
-            coefs = rng.dirichlet(np.ones(vertices.shape[0]))
-            coefs = np.maximum(coefs, 1e-12)
-            x_block = dirichlet_sample_duration_from_vertices(
-                vertices,
-                coefs
-            )
-
+            # coefs = rng.dirichlet(np.ones(vertices.shape[0]))
+            # coefs = np.maximum(coefs, 1e-12)
+            # x_block = dirichlet_sample_duration_from_vertices(
+            #     vertices,
+            #     coefs
+            # )
 
         else:
 
@@ -3423,19 +3423,21 @@ def _initialize_one_posterior_state_worker(args):
 
         if x0_block is None:
 
-            vertices = compute_polytope_vertices(A_block, b_block)
+            # vertices = compute_polytope_vertices(A_block, b_block)
+
+            x_block, r = find_feasible_point(A_block, b_block)
 
             # x_block = dirichlet_sample_duration_from_vertices(
             #     vertices,
             #     np.ones(vertices.shape[0]),
             # )
 
-            coefs = rng.dirichlet(np.ones(vertices.shape[0]))
-            coefs = np.maximum(coefs, 1e-12)
-            x_block = dirichlet_sample_duration_from_vertices(
-                vertices,
-                coefs
-            )
+            # coefs = rng.dirichlet(np.ones(vertices.shape[0]))
+            # coefs = np.maximum(coefs, 1e-12)
+            # x_block = dirichlet_sample_duration_from_vertices(
+            #     vertices,
+            #     coefs
+            # )
 
         else:
 
